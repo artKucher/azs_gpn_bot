@@ -22,6 +22,8 @@ set-container:
 build: set-container
 	docker-compose build ${c}
 
+build-no-cache: set-container
+	docker-compose build --no-cache ${c}
 run:
 	docker-compose up -d --force-recreate ${c}
 
@@ -43,11 +45,6 @@ exec: set-container
 log: set-container
 	docker-compose logs -f ${c}
 
-
-#run server local
-dev-local-deps:
-	docker-compose -f docker-compose.yml -f docker-compose-dev.yml up -d --force-recreate db nginx frontend
-
 python_path = server/venv/bin/
 local: dev-local-deps
 	$(eval $(call use-env))
@@ -61,10 +58,3 @@ makemigrations:
 migrate: makemigrations
 	docker-compose exec server ./manage.py migrate
 
-collectstatic:
-	docker-compose exec server ./manage.py collectstatic --noinput
-
-build-static:
-	docker-compose up --force-recreate frontend
-
-frontend: build-static collectstatic
