@@ -7,3 +7,4 @@ server/media/
 server/static/
 server/server.log
 server/mysite.log
+/server/app/migrations/
