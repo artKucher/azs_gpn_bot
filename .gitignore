@@ -1,0 +1,13 @@
+.env
+.DS_Store
+.idea/
+pgdata/
+*.pyc
+logs/nginx/
+logs/gunicorn/
+server/media/
+server/static/
+server/server.log
+server/mysite.log
+frontend/node_modules/
+frontend/dist/
