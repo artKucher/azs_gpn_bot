@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.gis.db.models import PointField
 
 # Create your models here.
 class User(models.Model):
@@ -19,7 +20,7 @@ class User(models.Model):
 
 class GasStation(models.Model):
     number = models.PositiveIntegerField()
-    gps = models.PointField()
+    gps = PointField()
     address = models.TextField()
 
     store = models.BooleanField(verbose_name='Магазин')

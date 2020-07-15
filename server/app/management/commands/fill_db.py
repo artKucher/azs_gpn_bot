@@ -1,3 +1,6 @@
+from random import randint, uniform
+
+from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from telegram import Bot, Update
@@ -13,4 +16,4 @@ class Command(BaseCommand):
         for i in range(0,2):
             flags = [randint(0,1) for i in range(26)]
             print(flags)
-            GasStation(number=randint(9999), gps=Point(random.uniform(1.5, 1.9),random.uniform(1.5, 1.9)), **flags).save()
+            GasStation(number=randint(9999), gps=Point(uniform(1.5, 1.9), uniform(1.5, 1.9)), **flags).save()
