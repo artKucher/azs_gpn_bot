@@ -62,7 +62,7 @@ class AzsBot():
 
     @log_errors
     def draw_menu(self):
-        custom_keyboard = [['top-left', 'top-right'],['bottom-left', 'bottom-right']]
+        custom_keyboard = [['Показать заправки(фильтр: )'],['Выбрать фильтр', 'Настроить фильтры']]
         reply_markup = ReplyKeyboardMarkup(custom_keyboard)
         return reply_markup
 

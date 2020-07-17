@@ -19,7 +19,7 @@ class User(models.Model):
         verbose_name_plural = 'Профили'
 
 class GasStation(models.Model):
-    number = models.PositiveIntegerField()
+    number = models.PositiveIntegerField(unique=True)
     gps = PointField()
     address = models.TextField()
 
