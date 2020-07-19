@@ -42,4 +42,4 @@ class Command(BaseCommand):
                 'partner_gas_station': randint(0, 1),
                 'electrocar_charger': randint(0, 1),
             }
-            GasStation(number=randint(1000,9999), gps=Point(uniform(65.382128, 65.795740), uniform(57.085757, 57.192989)), **flag).save()
+            GasStation(number=randint(1000,9999), location=Point(uniform(57.085757, 57.192989), uniform(65.382128, 65.795740)), **flag).save()
