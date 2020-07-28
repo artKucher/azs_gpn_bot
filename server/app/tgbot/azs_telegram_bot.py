@@ -4,7 +4,7 @@ from django.contrib.gis.measure import Distance
 from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler
 from telegram.utils.request import Request
-from app.models import User, Filter, GasStationProperties, GasStation
+from app.models import User, Filter, GasStationProperties, GasStation, FUEL_DICT, FUEL_CHOICES
 from backend.settings import FILTERS_COUNT
 
 
@@ -275,13 +275,29 @@ class AzsBot():
         print("СМЕНИТЬ ТИП БЕНЗИНА")
         filter = context.user_data['editable_filter']
         context.user_data['editable_field'] = 'target_fuel'
-
+        fuel_types = [(k, v) for k, v in FUEL_DICT.items()]
         query = update.callback_query
         query.answer()
         query.edit_message_text(
             text=f'Выберете тип топлива, которым заправляете авто',
-            #reply_markup=self.choose_active_filter_keyboard(filters))
+            reply_markup=self.choose_fuel_type_keyboard(fuel_types)
         )
+
+    @log_errors
+    def submit_fuel_type(self, update: Update, context: CallbackContext):
+        print("ВЫБОР ТИПА БЕНЗИНА")
+        chat_id = update.effective_user['id']
+        user, created = User.objects.get_or_create(
+            external_id=chat_id,
+            defaults={'username': update.effective_user['username']}
+        )
+        context.user_data['user_id'] = chat_id
+        filter = context.user_data['editable_filter']
+
+        fuel_type = update.callback_query.data.split('_')[-1]
+        setattr(filter, 'target_fuel', fuel_type)
+        filter.save()
+        self.main_menu(update, context)
 
     ################################# Keyboards #########################################
     def main_menu_keyboard(self):
@@ -309,6 +325,18 @@ class AzsBot():
         keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
         return InlineKeyboardMarkup(keyboard)
 
+    def choose_fuel_type_keyboard(self, fuel_types):
+        keyboard = []
+        for ft1, ft2, ft3, ft4 in zip(fuel_types[0::4], fuel_types[1::4], fuel_types[2::4], fuel_types[3::4]):
+            keyboard.append([
+                InlineKeyboardButton(ft1[1], callback_data='fueltype_'+str(ft1[0])),
+                InlineKeyboardButton(ft2[1], callback_data='fueltype_'+str(ft2[0])),
+                InlineKeyboardButton(ft3[1], callback_data='fueltype_'+str(ft3[0])),
+                InlineKeyboardButton(ft4[1], callback_data='fueltype_' + str(ft4[0]))
+            ])
+        keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
+        return InlineKeyboardMarkup(keyboard)
+
     def edit_filter_keyboard(self, context):
         filter = context.user_data['editable_filter']
         keyboard = []
@@ -324,7 +352,7 @@ class AzsBot():
             ])
         keyboard.append([InlineKeyboardButton(f"'{getattr(filter, 'name')}'", callback_data='change_filter_name')])
         keyboard.append([InlineKeyboardButton(f"{getattr(filter, 'search_radius')} км.", callback_data='change_filter_radius')])
-        keyboard.append([InlineKeyboardButton(f"{getattr(filter, 'target_fuel')}", callback_data='change_target_fuel')])
+        keyboard.append([InlineKeyboardButton(f"Топливо: {FUEL_DICT[getattr(filter, 'target_fuel')]}", callback_data='change_target_fuel')])
         keyboard.append([InlineKeyboardButton('Главное меню', callback_data='main')])
 
         return InlineKeyboardMarkup(keyboard)
@@ -357,7 +385,7 @@ class AzsBot():
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_filter, pattern=r'editfilter_\d+'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_active_filter, pattern='choose_active_filter'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_active_filter, pattern=r'activefilter_\d+'))
-
+        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_fuel_type, pattern=r'fueltype_\w+'))
 
 
         for property in GasStationProperties._meta.get_fields():

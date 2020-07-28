@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.gis.db.models import PointField
+from django.utils.timezone import now
+from djmoney.models.fields import MoneyField
 
 
 class Fuel:
@@ -104,3 +106,14 @@ class GasStation(GasStationProperties):
     class Meta:
         verbose_name = 'АЗС'
         verbose_name_plural = 'АЗС'
+
+class FuelPrice(models.Model):
+    gas_station = models.ForeignKey(GasStation, on_delete=models.CASCADE)
+    fuel_type = models.TextField(choices=FUEL_CHOICES, default=Fuel.petrol92, max_length=15)
+    price = MoneyField(
+        decimal_places=2,
+        default=0,
+        default_currency='RUB',
+        max_digits=11,
+    )
+    date = models.DateTimeField(default=now, editable=False)
