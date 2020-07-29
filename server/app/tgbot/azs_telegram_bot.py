@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
+from django.db.models import Prefetch
 from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler
 from telegram.utils.request import Request
-from app.models import User, Filter, GasStationProperties, GasStation, FUEL_DICT, FUEL_CHOICES
+from app.models import User, Filter, GasStationProperties, GasStation, FUEL_DICT, FUEL_CHOICES, FuelPrice
 from backend.settings import FILTERS_COUNT
 
 
@@ -56,15 +57,22 @@ class AzsBot():
 
         filtered_property = {}
         for field in GasStationProperties._meta.get_fields():
-            value = getattr(active_filter,field.name)
+            value = getattr(active_filter, field.name)
             if value:
-                filtered_property[field.name]=value
+                filtered_property[field.name] = value
 
-
-        gas_stations = GasStation.objects.filter(location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-                                                 **filtered_property)
-
-        print(gas_stations)
+        # gas_stations = GasStation.objects.filter(location__distance_lt=(point, Distance(km=active_filter.search_radius)),
+        #                                         **filtered_property).\
+        #    filter(fuelprice__fuel_type=active_filter.target_fuel)
+        # FuelPrice.objects.filter(gas_stations=gas_stations, fuel_type=active_filter.target_fuel)
+        gas_stations = GasStation.objects.filter(
+            location__distance_lt=(point, Distance(km=active_filter.search_radius)),
+            **filtered_property). \
+            prefetch_related(Prefetch('fuelprice_set',
+                                     queryset=FuelPrice.objects.filter(fuel_type=active_filter.target_fuel))) \
+                                    .order_by('id', '-fuelprice__date').distinct('id')
+        for gs in gas_stations:
+            print(f'{gs} {gs.fuelprice.price}')
         update.message.reply_text(
             text=f"Ok let's get it",
             reply_markup=self.main_menu_keyboard()
@@ -81,7 +89,7 @@ class AzsBot():
         context.user_data['user_id'] = chat_id
         filter = context.user_data['editable_filter']
         if filter:
-            if context.user_data['editable_field']=='radius':
+            if context.user_data['editable_field'] == 'radius':
                 context.user_data['editable_field'] = None
                 radius = update.message.text
                 print(radius)
@@ -107,7 +115,7 @@ class AzsBot():
         context.user_data['user_id'] = chat_id
         filter = context.user_data['editable_filter']
         if filter:
-            if context.user_data['editable_field']=='name':
+            if context.user_data['editable_field'] == 'name':
                 context.user_data['editable_field'] = None
                 previous_name = filter.name
                 setattr(filter, 'name', update.message.text)
@@ -152,7 +160,7 @@ class AzsBot():
         query.answer()
         active_filter = user.active_filter
         query.edit_message_text(
-            text=f'Главное меню. Aктивный фильтр {": " + active_filter.name if active_filter else "не выбран" }',
+            text=f'Главное меню. Aктивный фильтр {": " + active_filter.name if active_filter else "не выбран"}',
             reply_markup=self.main_menu_keyboard())
 
     @log_errors
@@ -309,7 +317,8 @@ class AzsBot():
     def tune_filters_keyboard(self, filters):
         keyboard = []
         for filter in filters:
-            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'), callback_data='editfilter_'+str(filter.id))])
+            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'),
+                                                  callback_data='editfilter_' + str(filter.id))])
         if filters.count() < FILTERS_COUNT:
             keyboard.append([InlineKeyboardButton('Add filter', callback_data='m1_add_filter'),
                              InlineKeyboardButton('Main menu', callback_data='main')])
@@ -321,7 +330,8 @@ class AzsBot():
     def choose_active_filter_keyboard(self, filters):
         keyboard = []
         for filter in filters:
-            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'), callback_data='activefilter_'+str(filter.id))])
+            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'),
+                                                  callback_data='activefilter_' + str(filter.id))])
         keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
         return InlineKeyboardMarkup(keyboard)
 
@@ -329,9 +339,9 @@ class AzsBot():
         keyboard = []
         for ft1, ft2, ft3, ft4 in zip(fuel_types[0::4], fuel_types[1::4], fuel_types[2::4], fuel_types[3::4]):
             keyboard.append([
-                InlineKeyboardButton(ft1[1], callback_data='fueltype_'+str(ft1[0])),
-                InlineKeyboardButton(ft2[1], callback_data='fueltype_'+str(ft2[0])),
-                InlineKeyboardButton(ft3[1], callback_data='fueltype_'+str(ft3[0])),
+                InlineKeyboardButton(ft1[1], callback_data='fueltype_' + str(ft1[0])),
+                InlineKeyboardButton(ft2[1], callback_data='fueltype_' + str(ft2[0])),
+                InlineKeyboardButton(ft3[1], callback_data='fueltype_' + str(ft3[0])),
                 InlineKeyboardButton(ft4[1], callback_data='fueltype_' + str(ft4[0]))
             ])
         keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
@@ -351,12 +361,13 @@ class AzsBot():
                 InlineKeyboardButton(name3, callback_data=field3.name)
             ])
         keyboard.append([InlineKeyboardButton(f"'{getattr(filter, 'name')}'", callback_data='change_filter_name')])
-        keyboard.append([InlineKeyboardButton(f"{getattr(filter, 'search_radius')} км.", callback_data='change_filter_radius')])
-        keyboard.append([InlineKeyboardButton(f"Топливо: {FUEL_DICT[getattr(filter, 'target_fuel')]}", callback_data='change_target_fuel')])
+        keyboard.append(
+            [InlineKeyboardButton(f"{getattr(filter, 'search_radius')} км.", callback_data='change_filter_radius')])
+        keyboard.append([InlineKeyboardButton(f"Топливо: {FUEL_DICT[getattr(filter, 'target_fuel')]}",
+                                              callback_data='change_target_fuel')])
         keyboard.append([InlineKeyboardButton('Главное меню', callback_data='main')])
 
         return InlineKeyboardMarkup(keyboard)
-
 
     def __init__(self):
         self.request = Request(
@@ -383,19 +394,20 @@ class AzsBot():
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.add_filter_menu, pattern='m1_add_filter'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.tune_filters_menu, pattern='tune_filters'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_filter, pattern=r'editfilter_\d+'))
-        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_active_filter, pattern='choose_active_filter'))
-        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_active_filter, pattern=r'activefilter_\d+'))
+        self.updater.dispatcher.add_handler(
+            CallbackQueryHandler(self.choose_active_filter, pattern='choose_active_filter'))
+        self.updater.dispatcher.add_handler(
+            CallbackQueryHandler(self.submit_active_filter, pattern=r'activefilter_\d+'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_fuel_type, pattern=r'fueltype_\w+'))
-
 
         for property in GasStationProperties._meta.get_fields():
             self.updater.dispatcher.add_handler(
                 CallbackQueryHandler(self.select_filter_property, pattern=property.name))
 
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.change_filter_name, pattern='change_filter_name'))
-        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.change_filter_radius, pattern='change_filter_radius'))
+        self.updater.dispatcher.add_handler(
+            CallbackQueryHandler(self.change_filter_radius, pattern='change_filter_radius'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.change_target_fuel, pattern='change_target_fuel'))
-
 
         self.updater.start_polling()
         self.updater.idle()

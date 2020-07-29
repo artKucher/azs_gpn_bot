@@ -1,3 +1,4 @@
+import datetime
 from random import randint, uniform
 
 from django.contrib.gis.geos import Point
@@ -6,7 +7,7 @@ from django.conf import settings
 from telegram import Bot, Update
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler
 from telegram.utils.request import Request
-from app.models import User, GasStation
+from app.models import User, GasStation, FuelPrice, FUEL_DICT
 from app.tgbot.azs_telegram_bot import AzsBot
 
 class Command(BaseCommand):
@@ -42,4 +43,9 @@ class Command(BaseCommand):
                 'partner_gas_station': randint(0, 1),
                 'electrocar_charger': randint(0, 1),
             }
-            GasStation(number=randint(1000,9999), location=Point(uniform(57.085757, 57.192989), uniform(65.382128, 65.795740)), **flag).save()
+            gs = GasStation(number=randint(1000,9999), location=Point(uniform(57.085757, 57.192989),
+                                                                 uniform(65.382128, 65.795740)), **flag)
+            gs.save()
+            for day in range(1,30):
+                for k,v in FUEL_DICT.items():
+                    FuelPrice(gas_station=gs, fuel_type=k, price=randint(20+day,30+day), date=datetime.datetime(2020, 7, day, 16, 00, 00, 0)).save()
