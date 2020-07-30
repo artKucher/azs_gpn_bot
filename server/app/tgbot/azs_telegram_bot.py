@@ -1,7 +1,9 @@
+import operator
+
 from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Min, Max, F, Q
 from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler
 from telegram.utils.request import Request
@@ -65,15 +67,39 @@ class AzsBot():
         #                                         **filtered_property).\
         #    filter(fuelprice__fuel_type=active_filter.target_fuel)
         # FuelPrice.objects.filter(gas_stations=gas_stations, fuel_type=active_filter.target_fuel)
+        lastest_prices_pks = FuelPrice.objects.filter(fuel_type=active_filter.target_fuel).\
+            order_by('gas_station','-date').distinct('gas_station').values_list('id', flat=True)
+
+        # gas_stations = GasStation.objects.filter(
+        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
+        #     **filtered_property). \
+        #     prefetch_related(Prefetch('fuelprice_set',
+        #                               queryset=FuelPrice.objects.filter(id__in=lastest_prices_pks),
+        #                               to_attr='fuelprices')).values_list(flat=True)\
+
+                                    #.annotate(price=Min('fuelprice__price'))
+                                     #queryset=FuelPrice.objects.filter(fuel_type=active_filter.target_fuel).order_by('-date').latest('id'))) \
+
+                                    #.order_by('id', '-fuelprice__date').distinct('id')
+
         gas_stations = GasStation.objects.filter(
             location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-            **filtered_property). \
-            prefetch_related(Prefetch('fuelprice_set',
-                                     queryset=FuelPrice.objects.filter(fuel_type=active_filter.target_fuel))) \
-                                    .order_by('id', '-fuelprice__date').distinct('id')
+            **filtered_property).\
+            annotate(
+                    pd=F('fuelprice__date'),
+                    price=F('fuelprice__price'),
+                    ft=F('fuelprice__fuel_type')
+                    ).\
+            filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
+            .order_by('id', '-pd').distinct('id')
+        #gas_stations = sorted(gas_stations, key=operator.attrgetter('price'), reverse=True)
+
         for gs in gas_stations:
-            print(f'{gs} {gs.fuelprice.price}')
+            print(f'{gs} {gs.pd} {gs.price} {gs.ft}', flush=True)
+        #print(gas_stations.query)
+        #print(gas_stations)
         update.message.reply_text(
+
             text=f"Ok let's get it",
             reply_markup=self.main_menu_keyboard()
         )

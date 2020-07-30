@@ -117,3 +117,6 @@ class FuelPrice(models.Model):
         max_digits=11,
     )
     date = models.DateTimeField(default=now, editable=False)
+
+    def __str__(self):
+        return f'Цена бензина {self.fuel_type} {self.price} {self.date}'
