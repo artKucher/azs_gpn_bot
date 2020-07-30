@@ -3,7 +3,7 @@ import operator
 from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
-from django.db.models import Prefetch, Min, Max, F, Q
+from django.db.models import Prefetch, Min, Max, F, Q, Subquery, OuterRef, Count
 from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler
 from telegram.utils.request import Request
@@ -54,7 +54,7 @@ class AzsBot():
             return
         print(GasStation.objects.all()[0].location)
         point = Point(update.message.location.latitude, update.message.location.longitude)
-        print(point)
+        context.user_data['user_location'] = point
         active_filter = user.active_filter
 
         filtered_property = {}
@@ -82,26 +82,48 @@ class AzsBot():
 
                                     #.order_by('id', '-fuelprice__date').distinct('id')
 
-        gas_stations = GasStation.objects.filter(
-            location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-            **filtered_property).\
-            annotate(
-                    pd=F('fuelprice__date'),
-                    price=F('fuelprice__price'),
-                    ft=F('fuelprice__fuel_type')
-                    ).\
-            filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
-            .order_by('id', '-pd').distinct('id')
+        # gas_stations = GasStation.objects.filter(
+        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
+        #     **filtered_property).\
+        #     annotate(
+        #             pd=F('fuelprice__date'),
+        #             price=F('fuelprice__price'),
+        #             ft=F('fuelprice__fuel_type')
+        #             ).\
+        #     filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
+        #     .order_by('id', '-pd').distinct('id')
         #gas_stations = sorted(gas_stations, key=operator.attrgetter('price'), reverse=True)
 
-        for gs in gas_stations:
-            print(f'{gs} {gs.pd} {gs.price} {gs.ft}', flush=True)
-        #print(gas_stations.query)
-        #print(gas_stations)
+        # gas_stations = GasStation.objects.filter(
+        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
+        #     **filtered_property). \
+        #     annotate(
+        #     pd=F('fuelprice__date'),
+        #     price=F('fuelprice__price'),
+        #     ft=F('fuelprice__fuel_type')
+        # ). \
+        #     filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
+        #     .order_by('id', '-pd').distinct('id')
+        fuel_price_sq = Subquery(FuelPrice.objects.\
+                    filter(gas_station=OuterRef('id')).\
+                    filter(Q(fuel_type=active_filter.target_fuel) | Q(fuel_type__isnull=True)).\
+                    order_by('-date').values('price')[:1])
+        search_radius = active_filter.search_radius
+        gas_stations = []
+        for r in range(active_filter.search_radius, active_filter.search_radius*10):
+            gas_stations = GasStation.objects.filter(
+                location__distance_lt=(point, Distance(km=r)),
+                **filtered_property). \
+                annotate(price=fuel_price_sq).order_by('price')
+            if gas_stations.count():
+                break
+            search_radius = r
+        message = ('Выберите АЗС' if search_radius==active_filter.search_radius
+                   else f'В радиусе {active_filter.search_radius} км. нет АЗС. '
+                        f'Радиус поиска расширен до {search_radius} км.')
         update.message.reply_text(
-
-            text=f"Ok let's get it",
-            reply_markup=self.main_menu_keyboard()
+            text=f"Выберите АЗС",
+            reply_markup=self.choose_target_gas_station_keyboard(gas_stations)
         )
 
     @log_errors
@@ -333,6 +355,26 @@ class AzsBot():
         filter.save()
         self.main_menu(update, context)
 
+    @log_errors
+    def submit_target_gas_station(self, update: Update, context: CallbackContext):
+        print("ВЫБОР ЦЕЛЕВОЙ ЗАПРАВКИ")
+        chat_id = update.effective_user['id']
+        user, created = User.objects.get_or_create(
+            external_id=chat_id,
+            defaults={'username': update.effective_user['username']}
+        )
+        context.user_data['user_id'] = chat_id
+        gas_station_id = update.callback_query.data.split('_')[-1]
+        gas_station = GasStation.objects.get(id=gas_station_id)
+        gs_location = gas_station.location
+        user_location = context.user_data['user_location']
+
+        direct_message = f'https://www.google.ru/maps/dir/{user_location.x},{user_location.y}/{gs_location.x},{gs_location.y}/'
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=direct_message )
+        self.main_menu(update,context)
+
     ################################# Keyboards #########################################
     def main_menu_keyboard(self):
         keyboard = [[InlineKeyboardButton('Настроить фильтры', callback_data='tune_filters')],
@@ -395,6 +437,14 @@ class AzsBot():
 
         return InlineKeyboardMarkup(keyboard)
 
+    def choose_target_gas_station_keyboard(self, gas_stations):
+        keyboard = []
+        for gs in gas_stations:
+            keyboard.append([InlineKeyboardButton((f'{(str(gs.price)+" ₽" if gs.price else "")} {gs.address}'),
+                                                  callback_data='targetgasstation_' + str(gs.id))])
+        keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
+        return InlineKeyboardMarkup(keyboard)
+
     def __init__(self):
         self.request = Request(
             connect_timeout=0.5,
@@ -420,6 +470,8 @@ class AzsBot():
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.add_filter_menu, pattern='m1_add_filter'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.tune_filters_menu, pattern='tune_filters'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_filter, pattern=r'editfilter_\d+'))
+        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_target_gas_station, pattern=r'targetgasstation_\d+'))
+
         self.updater.dispatcher.add_handler(
             CallbackQueryHandler(self.choose_active_filter, pattern='choose_active_filter'))
         self.updater.dispatcher.add_handler(
