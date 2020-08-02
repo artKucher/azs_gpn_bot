@@ -39,7 +39,7 @@ def price_statistic_keyboard(gas_stations):
     keyboard = []
     keyboard.append([InlineKeyboardButton('Среднее по всем АЗС', callback_data='pricestatistic_all')])
     for gs in gas_stations:
-        keyboard.append([InlineKeyboardButton(f'#{gs.number} {gs.address}',
+        keyboard.append([InlineKeyboardButton(f'№{gs.number} {gs.address}',
                                               callback_data='pricestatistic_' + str(gs.id))])
     keyboard.append([InlineKeyboardButton('Главное меню', callback_data='main')])
     return InlineKeyboardMarkup(keyboard)
