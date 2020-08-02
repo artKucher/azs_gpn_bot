@@ -146,4 +146,4 @@ TOKEN = '1260407925:AAEZtusZQTw8vq-KSwQpDW28aZ7zvXIhius'
 PROXY_URL = 'https://telegg.ru/orig/bot'
 
 #кол-во фильтров у пользователей
-FILTERS_COUNT = 10
+FILTERS_COUNT = 3

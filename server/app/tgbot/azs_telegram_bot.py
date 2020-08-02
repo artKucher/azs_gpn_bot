@@ -1,14 +1,20 @@
+import io
 import operator
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import Distance
-from django.db.models import Prefetch, Min, Max, F, Q, Subquery, OuterRef, Count
+from django.db.models import Prefetch, Min, Max, F, Q, Subquery, OuterRef, Count, Avg
+from django.utils.datetime_safe import datetime
 from telegram import Bot, Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, Updater, MessageHandler, Filters, CommandHandler, CallbackQueryHandler
 from telegram.utils.request import Request
 from app.models import User, Filter, GasStationProperties, GasStation, FUEL_DICT, FUEL_CHOICES, FuelPrice
+from app.tgbot.keyboards import choose_fuel_type_keyboard, price_statistic_keyboard, choose_active_filter_keyboard, \
+    edit_filter_keyboard, main_menu_keyboard, tune_filters_keyboard, choose_target_gas_station_keyboard
 from backend.settings import FILTERS_COUNT
+import matplotlib.pyplot as plt
 
 
 class AzsBot():
@@ -25,17 +31,48 @@ class AzsBot():
         return inner
 
     @log_errors
+    def do_help(self, update: Update, context: CallbackContext):
+        chat_id = update.message.chat_id
+        user, created = User.objects.get_or_create(
+            external_id=chat_id,
+            defaults={'username': update.message.from_user.username}
+        )
+        help_message='/start - Начать работу с ботом\n' \
+                     '/help - Показать подсказку\n\n' \
+                     'Фильтр\n' \
+                     f'Каждый пользователь может создать {FILTERS_COUNT} шт. фильтров. ' \
+                     f'На основе параметров активного фильтра подбираются подходящие АЗС для пользователя. ' \
+                     f'Для настройки фильтра нажмите кнопку "Настроить фильтры" и выберите фильтр. ' \
+                     f'Выберите опции, которыми должна обладать АЗС. ' \
+                     f'Смените название фильтра нажав на соответствующую кнопку. ' \
+                     f'В названии фильтра обязательно должны присутствовать буквы в начале. ' \
+                     f'Для смены радиуса поиска азс нажмите на соответствующую кнопку и введите целое число в км. ' \
+                     f'На основе выбранного топлива происходит сортировка азс по выгодности, а также вывод графиков цены на топливо. ' \
+                     f'После окончания редактирования фильтра нажмите кнопку "Главное меню"\n\n' \
+                     f'Подбор АЗС\n' \
+                     f'Для подбора подходящей АЗС создайте и выберите активный фильтр. ' \
+                     f'Отправьте боту свою геолокация. ' \
+                     f'На основе активного фильтра будут подобраны азс и отсортированны по цене топлива по возрастанию. ' \
+                     f'Выберите желаемую азс и бот отправит вам маршрут до неё\n\n' \
+                     f'Динамика цен\n' \
+                     f'Нажмите на соответствующую кнопку в главном меню и выберите интересующую АЗС для просмотра ' \
+                     f'графика изменения цены на топливо, выбранного в активном фильтре.'
+
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=help_message
+        )
+        self.main_menu(update,context,new=True)
+
+    @log_errors
     def do_start(self, update: Update, context: CallbackContext):
         chat_id = update.message.chat_id
         user, created = User.objects.get_or_create(
             external_id=chat_id,
             defaults={'username': update.message.from_user.username}
         )
-        context.user_data['user_id'] = chat_id
-        update.message.reply_text(
-            text=f"Ok let's get it",
-            reply_markup=self.main_menu_keyboard()
-        )
+
+        self.main_menu(update, context, new=True)
 
     @log_errors
     def filtered_gas_stations(self, update: Update, context: CallbackContext):
@@ -46,13 +83,12 @@ class AzsBot():
         )
         context.user_data['user_id'] = chat_id
         if not user.active_filter:
-            filters = Filter.objects.filter(user=user)[:FILTERS_COUNT]
-            update.message.reply_text(
-                text=f"Выберете активный фильтр",
-                reply_markup=self.choose_active_filter_keyboard(filters)
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text='Сначала выберите активный фильтр'
             )
+            self.choose_active_filter(update,context,new=True)
             return
-        print(GasStation.objects.all()[0].location)
         point = Point(update.message.location.latitude, update.message.location.longitude)
         context.user_data['user_location'] = point
         active_filter = user.active_filter
@@ -63,47 +99,6 @@ class AzsBot():
             if value:
                 filtered_property[field.name] = value
 
-        # gas_stations = GasStation.objects.filter(location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-        #                                         **filtered_property).\
-        #    filter(fuelprice__fuel_type=active_filter.target_fuel)
-        # FuelPrice.objects.filter(gas_stations=gas_stations, fuel_type=active_filter.target_fuel)
-        lastest_prices_pks = FuelPrice.objects.filter(fuel_type=active_filter.target_fuel).\
-            order_by('gas_station','-date').distinct('gas_station').values_list('id', flat=True)
-
-        # gas_stations = GasStation.objects.filter(
-        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-        #     **filtered_property). \
-        #     prefetch_related(Prefetch('fuelprice_set',
-        #                               queryset=FuelPrice.objects.filter(id__in=lastest_prices_pks),
-        #                               to_attr='fuelprices')).values_list(flat=True)\
-
-                                    #.annotate(price=Min('fuelprice__price'))
-                                     #queryset=FuelPrice.objects.filter(fuel_type=active_filter.target_fuel).order_by('-date').latest('id'))) \
-
-                                    #.order_by('id', '-fuelprice__date').distinct('id')
-
-        # gas_stations = GasStation.objects.filter(
-        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-        #     **filtered_property).\
-        #     annotate(
-        #             pd=F('fuelprice__date'),
-        #             price=F('fuelprice__price'),
-        #             ft=F('fuelprice__fuel_type')
-        #             ).\
-        #     filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
-        #     .order_by('id', '-pd').distinct('id')
-        #gas_stations = sorted(gas_stations, key=operator.attrgetter('price'), reverse=True)
-
-        # gas_stations = GasStation.objects.filter(
-        #     location__distance_lt=(point, Distance(km=active_filter.search_radius)),
-        #     **filtered_property). \
-        #     annotate(
-        #     pd=F('fuelprice__date'),
-        #     price=F('fuelprice__price'),
-        #     ft=F('fuelprice__fuel_type')
-        # ). \
-        #     filter(Q(ft=active_filter.target_fuel) | Q(ft__isnull=True))\
-        #     .order_by('id', '-pd').distinct('id')
         fuel_price_sq = Subquery(FuelPrice.objects.\
                     filter(gas_station=OuterRef('id')).\
                     filter(Q(fuel_type=active_filter.target_fuel) | Q(fuel_type__isnull=True)).\
@@ -123,7 +118,7 @@ class AzsBot():
                         f'Радиус поиска расширен до {search_radius} км.')
         update.message.reply_text(
             text=f"Выберите АЗС",
-            reply_markup=self.choose_target_gas_station_keyboard(gas_stations)
+            reply_markup=choose_target_gas_station_keyboard(gas_stations)
         )
 
     @log_errors
@@ -145,7 +140,7 @@ class AzsBot():
                 filter.save()
                 update.message.reply_text(
                     text=f"Для фильтра '{filter.name}' установлен радиус поиска: {radius}",
-                    reply_markup=self.edit_filter_keyboard(context)
+                    reply_markup=edit_filter_keyboard(context)
                 )
         else:
             update.message.reply_text(
@@ -170,7 +165,7 @@ class AzsBot():
                 filter.save()
                 update.message.reply_text(
                     text=f"Для фильтра '{previous_name}' установлено новое имя: {filter.name}",
-                    reply_markup=self.edit_filter_keyboard(context)
+                    reply_markup=edit_filter_keyboard(context)
                 )
         else:
             print(update)
@@ -193,8 +188,7 @@ class AzsBot():
         self.edit_filter_menu(update, context)
 
     @log_errors
-    def main_menu(self, update: Update, context: CallbackContext):
-        print('MAIN MENU')
+    def main_menu(self, update: Update, context: CallbackContext, new=False):
         context.user_data['editable_filter'] = None
 
         chat_id = update.effective_user['id']
@@ -204,12 +198,23 @@ class AzsBot():
         )
         context.user_data['user_id'] = chat_id
 
-        query = update.callback_query
-        query.answer()
         active_filter = user.active_filter
-        query.edit_message_text(
-            text=f'Главное меню. Aктивный фильтр {": " + active_filter.name if active_filter else "не выбран"}',
-            reply_markup=self.main_menu_keyboard())
+        text = f'Главное меню. Aктивный фильтр{": " + active_filter.name if active_filter else " не выбран"}.\n' \
+               f'Для подбора АЗС отправьте свою геолокацию.'
+        reply_markup = main_menu_keyboard()
+        if new:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        else:
+            query = update.callback_query
+            query.answer()
+            query.edit_message_text(
+                text=text,
+                reply_markup=reply_markup
+            )
 
     @log_errors
     def tune_filters_menu(self, update: Update, context: CallbackContext):
@@ -224,10 +229,10 @@ class AzsBot():
         query.answer()
         query.edit_message_text(
             text='Выберите фильтр для редактирования:',
-            reply_markup=self.tune_filters_keyboard(filters))
+            reply_markup=tune_filters_keyboard(filters))
 
     @log_errors
-    def add_filter_menu(self, update: Update, context: CallbackContext):
+    def add_filter_menu(self, update: Update, context: CallbackContext,new=False):
         print('ДОБАВИТЬ ФИЛЬТР')
         chat_id = update.effective_user['id']
         user, created = User.objects.get_or_create(
@@ -237,25 +242,28 @@ class AzsBot():
         new_filter = Filter(user=user)
         new_filter.save()
         context.user_data['editable_filter'] = new_filter
-        self.edit_filter_menu(update, context)
+        self.edit_filter_menu(update, context, new)
 
     @log_errors
-    def edit_filter_menu(self, update: Update, context: CallbackContext):
+    def edit_filter_menu(self, update: Update, context: CallbackContext, new=False):
         print('ОТРЕДАКТИРОВАТЬ ФИЛЬТР')
-        print(context)
         filter = context.user_data['editable_filter']
-        chat_id = update.effective_user['id']
-        user, created = User.objects.get_or_create(
-            external_id=chat_id,
-            defaults={'username': update.effective_user['username']}
-        )
 
-        query = update.callback_query
-        query.answer()
-        query.edit_message_text(
-            text=f'{filter.name} редактирование',
-            reply_markup=self.edit_filter_keyboard(context)
-        )
+        text = f'Редактирование фильтра "{filter.name}"'
+        reply_markup = edit_filter_keyboard(context)
+        if new:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        else:
+            query = update.callback_query
+            query.answer()
+            query.edit_message_text(
+                text=text,
+                reply_markup=reply_markup
+            )
 
     @log_errors
     def select_filter_property(self, update: Update, context: CallbackContext):
@@ -268,8 +276,8 @@ class AzsBot():
         query = update.callback_query
         query.answer()
         query.edit_message_text(
-            text=f'Редактирование фильтра {filter.name}',
-            reply_markup=self.edit_filter_keyboard(context)
+            text=f'Опция "{filter._meta.get_field(property).verbose_name}"',
+            reply_markup=edit_filter_keyboard(context)
         )
 
     @log_errors
@@ -297,7 +305,7 @@ class AzsBot():
         )
 
     @log_errors
-    def choose_active_filter(self, update: Update, context: CallbackContext):
+    def choose_active_filter(self, update: Update, context: CallbackContext, new=False):
         print('ВЫБОР АКТИВНОГО ФИЛЬТРА')
         chat_id = update.effective_user['id']
         user, created = User.objects.get_or_create(
@@ -305,11 +313,51 @@ class AzsBot():
             defaults={'username': update.effective_user['username']}
         )
         filters = Filter.objects.filter(user=user)[:FILTERS_COUNT]
+        if not filters.count():
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text='Вы не создали ни одного фильтра, время это исправить.'
+            )
+            self.add_filter_menu(update,context, new)
+            return
+        text = 'Выберите активный фильтр:'
+        reply_markup = choose_active_filter_keyboard(filters)
+        if new:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        else:
+            query = update.callback_query
+            query.answer()
+            query.edit_message_text(
+                text=text,
+                reply_markup=reply_markup
+            )
+
+    @log_errors
+    def price_statistic(self, update: Update, context: CallbackContext):
+        print('ВЫБОР АЗС СТАТИСТИКА')
+        chat_id = update.effective_user['id']
+        user, created = User.objects.get_or_create(
+            external_id=chat_id,
+            defaults={'username': update.effective_user['username']}
+        )
+        if not user.active_filter:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f'Сначала вам нужно выбрать активный фильтр.\n'
+                     f'Топливо для отображения статистики будет выбрано на основе активного фильтра'
+            )
+            self.choose_active_filter(update,context,new=True)
+            return
+        gas_stations = GasStation.objects.all()
         query = update.callback_query
         query.answer()
         query.edit_message_text(
-            text='Выберите активный фильтр:',
-            reply_markup=self.choose_active_filter_keyboard(filters))
+            text='Выберите станцию для просмотра динамики цены:',
+            reply_markup=price_statistic_keyboard(gas_stations))
 
     @log_errors
     def submit_active_filter(self, update: Update, context: CallbackContext):
@@ -336,7 +384,7 @@ class AzsBot():
         query.answer()
         query.edit_message_text(
             text=f'Выберете тип топлива, которым заправляете авто',
-            reply_markup=self.choose_fuel_type_keyboard(fuel_types)
+            reply_markup=choose_fuel_type_keyboard(fuel_types)
         )
 
     @log_errors
@@ -375,75 +423,51 @@ class AzsBot():
             text=direct_message )
         self.main_menu(update,context)
 
-    ################################# Keyboards #########################################
-    def main_menu_keyboard(self):
-        keyboard = [[InlineKeyboardButton('Настроить фильтры', callback_data='tune_filters')],
-                    [InlineKeyboardButton('Выбрать активный фильтр', callback_data='choose_active_filter')],
-                    [InlineKeyboardButton('Option 3', callback_data='m3')]]
-        return InlineKeyboardMarkup(keyboard)
-
-    def tune_filters_keyboard(self, filters):
-        keyboard = []
-        for filter in filters:
-            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'),
-                                                  callback_data='editfilter_' + str(filter.id))])
-        if filters.count() < FILTERS_COUNT:
-            keyboard.append([InlineKeyboardButton('Add filter', callback_data='m1_add_filter'),
-                             InlineKeyboardButton('Main menu', callback_data='main')])
+    @log_errors
+    def submit_price_statistic(self, update: Update, context: CallbackContext):
+        print("ВЫБОР АЗС СТАТИСТИКА1")
+        chat_id = update.effective_user['id']
+        user, created = User.objects.get_or_create(
+            external_id=chat_id,
+            defaults={'username': update.effective_user['username']}
+        )
+        context.user_data['user_id'] = chat_id
+        gas_station_id = update.callback_query.data.split('_')[-1]
+        if gas_station_id== 'all':
+            prices = FuelPrice.objects.filter(fuel_type=user.active_filter.target_fuel,
+                                              date__gte=datetime.now() - timedelta(days=30)).order_by('date')\
+                                        .extra(select={'datestr': "to_char(date, 'DD-MM')"})\
+                                        .values('datestr').annotate(price=Avg('price'))
+            prices = prices.extra(select={'datestr': "to_char(date, 'DD-MM')"})
+            title = f'График изменения средней цены всех АЗС\n'
+            print(prices.query)
         else:
-            keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
+            gas_station = GasStation.objects.get(id=gas_station_id)
+            prices = FuelPrice.objects.filter(gas_station=gas_station_id, fuel_type=user.active_filter.target_fuel,
+                                              date__gte=datetime.now() - timedelta(days=30)).order_by('date')
+            prices = prices.extra(select={'datestr':"to_char(date, 'DD-MM')"})
+            title = f'График изменения цен АЗС №{gas_station.number} {gas_station.address}\n'
 
-        return InlineKeyboardMarkup(keyboard)
+        title+=f'Топливо {FUEL_DICT[user.active_filter.target_fuel]}\n'
+        data_x = list(prices.values_list('price', flat=True))
+        data_y = list(prices.values_list('datestr', flat=True))
+        plt.clf()
+        plt.plot(data_y,data_x)
+        plt.title(title)
+        plt.ylabel('Цена за 1 л.')
+        plt.xlabel('Дата')
+        plt.xticks(rotation=90)
+        plt.grid()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=300)
+        buf.seek(0)
 
-    def choose_active_filter_keyboard(self, filters):
-        keyboard = []
-        for filter in filters:
-            keyboard.append([InlineKeyboardButton((filter.name if filter.name else 'Фильтр'),
-                                                  callback_data='activefilter_' + str(filter.id))])
-        keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
-        return InlineKeyboardMarkup(keyboard)
+        context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=buf
+        )
 
-    def choose_fuel_type_keyboard(self, fuel_types):
-        keyboard = []
-        for ft1, ft2, ft3, ft4 in zip(fuel_types[0::4], fuel_types[1::4], fuel_types[2::4], fuel_types[3::4]):
-            keyboard.append([
-                InlineKeyboardButton(ft1[1], callback_data='fueltype_' + str(ft1[0])),
-                InlineKeyboardButton(ft2[1], callback_data='fueltype_' + str(ft2[0])),
-                InlineKeyboardButton(ft3[1], callback_data='fueltype_' + str(ft3[0])),
-                InlineKeyboardButton(ft4[1], callback_data='fueltype_' + str(ft4[0]))
-            ])
-        keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
-        return InlineKeyboardMarkup(keyboard)
-
-    def edit_filter_keyboard(self, context):
-        filter = context.user_data['editable_filter']
-        keyboard = []
-        fields = GasStationProperties._meta.get_fields()
-        for field1, field2, field3 in zip(fields[0::3], fields[1::3], fields[2::3]):
-            name1 = ('✅ ' if getattr(filter, field1.name) else '') + field1.verbose_name
-            name2 = ('✅ ' if getattr(filter, field2.name) else '') + field2.verbose_name
-            name3 = ('✅ ' if getattr(filter, field3.name) else '') + field3.verbose_name
-            keyboard.append([
-                InlineKeyboardButton(name1, callback_data=field1.name),
-                InlineKeyboardButton(name2, callback_data=field2.name),
-                InlineKeyboardButton(name3, callback_data=field3.name)
-            ])
-        keyboard.append([InlineKeyboardButton(f"'{getattr(filter, 'name')}'", callback_data='change_filter_name')])
-        keyboard.append(
-            [InlineKeyboardButton(f"{getattr(filter, 'search_radius')} км.", callback_data='change_filter_radius')])
-        keyboard.append([InlineKeyboardButton(f"Топливо: {FUEL_DICT[getattr(filter, 'target_fuel')]}",
-                                              callback_data='change_target_fuel')])
-        keyboard.append([InlineKeyboardButton('Главное меню', callback_data='main')])
-
-        return InlineKeyboardMarkup(keyboard)
-
-    def choose_target_gas_station_keyboard(self, gas_stations):
-        keyboard = []
-        for gs in gas_stations:
-            keyboard.append([InlineKeyboardButton((f'{(str(gs.price)+" ₽" if gs.price else "")} {gs.address}'),
-                                                  callback_data='targetgasstation_' + str(gs.id))])
-        keyboard.append([InlineKeyboardButton('Main menu', callback_data='main')])
-        return InlineKeyboardMarkup(keyboard)
+        self.main_menu(update,context,new=True)
 
     def __init__(self):
         self.request = Request(
@@ -462,6 +486,7 @@ class AzsBot():
 
     def start(self):
         self.updater.dispatcher.add_handler(CommandHandler('start', self.do_start))
+        self.updater.dispatcher.add_handler(CommandHandler('help', self.do_help))
         self.updater.dispatcher.add_handler(MessageHandler(Filters.location, self.filtered_gas_stations))
         self.updater.dispatcher.add_handler(MessageHandler(Filters.regex(r'^\d+$'), self.do_digit_command))
         self.updater.dispatcher.add_handler(MessageHandler(Filters.regex(r'\w+'), self.do_text_command))
@@ -471,6 +496,7 @@ class AzsBot():
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.tune_filters_menu, pattern='tune_filters'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.choose_filter, pattern=r'editfilter_\d+'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_target_gas_station, pattern=r'targetgasstation_\d+'))
+        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.submit_price_statistic, pattern=r'pricestatistic_\w+'))
 
         self.updater.dispatcher.add_handler(
             CallbackQueryHandler(self.choose_active_filter, pattern='choose_active_filter'))
@@ -486,6 +512,7 @@ class AzsBot():
         self.updater.dispatcher.add_handler(
             CallbackQueryHandler(self.change_filter_radius, pattern='change_filter_radius'))
         self.updater.dispatcher.add_handler(CallbackQueryHandler(self.change_target_fuel, pattern='change_target_fuel'))
+        self.updater.dispatcher.add_handler(CallbackQueryHandler(self.price_statistic, pattern='price_statistic'))
 
         self.updater.start_polling()
         self.updater.idle()

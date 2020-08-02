@@ -73,7 +73,7 @@ class GasStationProperties(models.Model):
     tire_inflation = models.BooleanField(verbose_name='Подкачка шин', default=0)
     vacuum_cleaner = models.BooleanField(verbose_name='Пылесос', default=0)
     water = models.BooleanField(verbose_name='Вода', default=0)
-    automated_car_wash = models.BooleanField(verbose_name='автоматическая мойка', default=0)
+    automated_car_wash = models.BooleanField(verbose_name='Aвтоматическая мойка', default=0)
     hand_car_wash = models.BooleanField(verbose_name='Ручная мойка', default=0)
     tire_utilization = models.BooleanField(verbose_name='Пункт приема шин для утилизации', default=0)
     trailer_rental = models.BooleanField(verbose_name='Аренда прицепов', default=0)
@@ -88,7 +88,7 @@ class GasStationProperties(models.Model):
 class Filter(GasStationProperties):
     search_radius = models.PositiveIntegerField(verbose_name='Радиус поиска', default=4)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    name = models.TextField(blank=True)
+    name = models.TextField(blank=True, default='Без названия')
     target_fuel = models.TextField(choices=FUEL_CHOICES, default=Fuel.petrol92, max_length=15)
 
     class Meta:
