@@ -10,11 +10,20 @@ from telegram.utils.request import Request
 from app.models import User, GasStation, FuelPrice, FUEL_DICT
 from app.tgbot.azs_telegram_bot import AzsBot
 
+
+
 class Command(BaseCommand):
     help = 'fill database'
-
+    addresses_dict = ['Красина, вл15',
+                        'Нижняя, 12 ст1',
+                        'Беговая, 2а ст1',
+                        'Скотопрогонная, вл2Б',
+                        'Гаврикова, 4 ст1',
+                        'Веткина, 7',
+                        'Барклая, вл26',
+                        'Люблинская, 12Б']
     def handle(self, *args, **options):
-        for i in range(0,4):
+        for i in range(0,7):
             flag = {
                 'store': randint(0, 1),
                 'stop_express': randint(0, 1),
@@ -43,9 +52,13 @@ class Command(BaseCommand):
                 'partner_gas_station': randint(0, 1),
                 'electrocar_charger': randint(0, 1),
             }
-            gs = GasStation(number=randint(1000,9999), location=Point(uniform(57.085757, 57.192989),
+            gs = GasStation(number=randint(1000,9999),address=self.addresses_dict[i], location=Point(uniform(57.085757, 57.192989),
                                                                  uniform(65.382128, 65.795740)), **flag)
             gs.save()
             for day in range(1,30):
                 for k,v in FUEL_DICT.items():
                     FuelPrice(gas_station=gs, fuel_type=k, price=randint(20+day,30+day), date=datetime.datetime(2020, 7, day, 16, 00, 00, 0)).save()
+            for day in range(1, 3):
+                for k, v in FUEL_DICT.items():
+                    FuelPrice(gas_station=gs, fuel_type=k, price=randint(20 + day, 30 + day),
+                            date=datetime.datetime(2020, 8, day, 16, 00, 00, 0)).save()
