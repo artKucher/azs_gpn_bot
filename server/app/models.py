@@ -95,13 +95,16 @@ class Filter(GasStationProperties):
         verbose_name = 'Фильтр АЗС'
         verbose_name_plural = 'Фильтр АЗС'
 
+    def __str__(self):
+        return f'Фильтр {self.id} {self.name} {self.target_fuel}'
+
 class GasStation(GasStationProperties):
     number = models.PositiveIntegerField(unique=True, verbose_name='Номер АЗС')
     location = PointField()
     address = models.TextField()
 
     def __str__(self):
-        return f'АЗС №{self.number} {self.address} {self.location}'
+        return f'АЗС №{self.number} {self.address} {self.location.x} {self.location.y}'
 
     class Meta:
         verbose_name = 'АЗС'

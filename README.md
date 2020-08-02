@@ -4,6 +4,11 @@
 ### develop
 * make dev
 
-### production
-* make run
+### заполнить базу данными 
+./manage.py fill_db
+
+### запуск бота
+./managa.py azs_bot
+
+
 
