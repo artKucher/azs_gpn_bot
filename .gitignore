@@ -2,5 +2,4 @@
 .idea/
 pgdata/
 *.pyc
-logs/gunicorn/
 /server/app/migrations/
