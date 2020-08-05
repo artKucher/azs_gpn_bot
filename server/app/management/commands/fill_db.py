@@ -58,7 +58,7 @@ class Command(BaseCommand):
             for day in range(1,30):
                 for k,v in FUEL_DICT.items():
                     FuelPrice(gas_station=gs, fuel_type=k, price=randint(20+day,30+day), date=datetime.datetime(2020, 7, day, 16, 00, 00, 0)).save()
-            for day in range(1, 3):
+            for day in range(1, 5):
                 for k, v in FUEL_DICT.items():
-                    FuelPrice(gas_station=gs, fuel_type=k, price=randint(20 + day, 30 + day),
+                    FuelPrice(gas_station=gs, fuel_type=k, price=randint(40 + day, 50 + day),
                             date=datetime.datetime(2020, 8, day, 16, 00, 00, 0)).save()
