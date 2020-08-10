@@ -17,18 +17,12 @@ class Command(BaseCommand):
     help = 'fill database'
 
     def handle(self, *args, **options):
-        # cookies = {'MyRegion': '%D0%A2%D1%8E%D0%BC%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%BE%D0%B1%D0%BB%D0%B0%D1%81%D1%82%D1%8C',
-        #            'CenterLat': '56.80244',
-        #            'CenterLon': '67.39452',
-        #            'MyCity': '%D0%A2%D1%8E%D0%BC%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%BE%D0%B1%D0%BB%D0%B0%D1%81%D1%82%D1%8C',
-        #            'SortIndex': '143',
-        #            'cookiesession1': '6D0C4ED6RT1EI6GTD0V14ERJK14FE110'
-        #            ,'PHPSESSID': 'gk8cdutrm1pl2oiuobsc5nelk6'}
         cookies = {'MyRegion': '%D0%A2%D1%8E%D0%BC%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%BE%D0%B1%D0%BB%D0%B0%D1%81%D1%82%D1%8C',
                    'MyCity': '%D0%A2%D1%8E%D0%BC%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%BE%D0%B1%D0%BB%D0%B0%D1%81%D1%82%D1%8C',
                    'CenterLat': '56.80244',
                    'CenterLon': '67.39452',
                    'SortIndex': '143',
+                   'upd': '1'
                   }
         resp = req.get("https://www.gpnbonus.ru/our_azs/", cookies=cookies)
         reverse_properties_name = self.get_reverse_properties_name()
