@@ -50,10 +50,14 @@ class Command(BaseCommand):
                 ft_price = ft_block.find('div',
                                          class_='inline-block',
                                          style=re.compile(';color: #009CDE;font-size: 11px; display: block')).getText().split('₽')[0]
-                if ft_price.isdigit():
-                    FuelPrice(gas_station=gs,
-                              fuel_type=ft_name,
-                              price=ft_price).save()
+                try:
+                    fp = FuelPrice(gas_station=gs,
+                              fuel_type=reverse_fuel_type_name[ft_name],
+                              price=ft_price)
+                    print(fp)
+                    fp.save()
+                except:
+                    pass
 
 
 
