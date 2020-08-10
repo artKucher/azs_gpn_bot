@@ -57,17 +57,17 @@ class User(models.Model):
 class GasStationProperties(models.Model):
     store = models.BooleanField(verbose_name='Магазин', default=0)
     stop_express = models.BooleanField(verbose_name='StopExpress', default=0)
-    app_payment = models.BooleanField(verbose_name='Оплата через приложение', default=0)
+    app_payment = models.BooleanField(verbose_name='Оплата в приложении', default=0)
     cafe = models.BooleanField(verbose_name='Кафе', default=0)
     wc = models.BooleanField(verbose_name='Туалет', default=0)
     eur_fuel_pistol = models.BooleanField(verbose_name='Европистолет', default=0)
-    round_the_clock = models.BooleanField(verbose_name='24 часа', default=0)
+    round_the_clock = models.BooleanField(verbose_name='Круглосуточная работа', default=0)
     postpayment = models.BooleanField(verbose_name='Постоплата', default=0)
     atm = models.BooleanField(verbose_name='Банкомат', default=0)
     wifi = models.BooleanField(verbose_name='Wi-Fi', default=0)
     services_payment_terminal = models.BooleanField(verbose_name='Терминал оплаты услуг', default=0)
     automated = models.BooleanField(verbose_name='Автоматическая АЗС', default=0)
-    remote_fuel_dispancer = models.BooleanField(verbose_name='Выносная  ТРК', default=0)
+    remote_fuel_dispancer = models.BooleanField(verbose_name='Выносная ТРК', default=0)
     support_npp_card = models.BooleanField(verbose_name='Прием карт «Нам По Пути»', default=0)
     support_gpn_card = models.BooleanField(verbose_name='Оплата топливной картой ГПН', default=0)
     tire_inflation = models.BooleanField(verbose_name='Подкачка шин', default=0)
@@ -79,8 +79,10 @@ class GasStationProperties(models.Model):
     trailer_rental = models.BooleanField(verbose_name='Аренда прицепов', default=0)
     refueller = models.BooleanField(verbose_name='Заправщик', default=0)
     device_charger = models.BooleanField(verbose_name='Зарядка для мобильных устройств', default=0)
-    partner_gas_station = models.BooleanField(verbose_name='Cеть партнерских АЗС', default=0)
+    partner_gas_station = models.BooleanField(verbose_name='Сеть партнерских АЗС', default=0)
     electrocar_charger = models.BooleanField(verbose_name='Зарядка для электромобилей', default=0)
+    qr_code = models.BooleanField(verbose_name='QR код', default=0)
+
 
     class Meta:
         abstract = True
