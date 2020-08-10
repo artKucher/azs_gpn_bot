@@ -6,6 +6,8 @@ RUN apt-get update -y && apt-get upgrade -y
 RUN apt-get install -y gdal-bin libgdal-dev
 RUN apt-get install -y python3-gdal
 RUN apt-get install -y binutils libproj-dev
+RUN apt-get install -y cron
+RUN cp app/fill_db.sh /etc/cron.daily/fill_db.sh
 
 RUN mkdir /app
 WORKDIR /app
