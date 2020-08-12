@@ -115,7 +115,7 @@ class AzsBot():
     def __init__(self):
         self.request = Request(
             connect_timeout=0.5,
-            read_timeout=1.0,
+            read_timeout=3.0,
         )
         self.bot = Bot(
             request=self.request,

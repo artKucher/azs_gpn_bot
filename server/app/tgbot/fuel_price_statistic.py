@@ -62,7 +62,7 @@ def submit_price_statistic(update: Update, context: CallbackContext):
     gas_station_id = update.callback_query.data.split('_')[-1]
     if gas_station_id == 'all':
         prices = FuelPrice.objects.filter(fuel_type=user.active_filter.target_fuel,
-                                          date__gte=datetime.now() - timedelta(days=30)).order_by('date') \
+                                          date__gte=datetime.now() - timedelta(days=30)).order_by('datestr') \
             .extra(select={'datestr': "to_char(date, 'DD-MM')"}) \
             .values('datestr').annotate(price=Avg('price'))
         prices = prices.extra(select={'datestr': "to_char(date, 'DD-MM')"})
