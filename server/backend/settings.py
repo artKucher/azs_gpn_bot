@@ -142,8 +142,8 @@ STATIC_ROOT = 'static'
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 #bot settings
-TOKEN = '1260407925:AAEZtusZQTw8vq-KSwQpDW28aZ7zvXIhius'
-PROXY_URL = 'https://telegg.ru/orig/bot'
+TOKEN = os.getenv('TG_TOKEN', ''),
+#PROXY_URL = 'https://telegg.ru/orig/bot'
 
 #кол-во фильтров у пользователей
 FILTERS_COUNT = 3

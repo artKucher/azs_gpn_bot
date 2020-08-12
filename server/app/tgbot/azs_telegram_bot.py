@@ -120,7 +120,6 @@ class AzsBot():
         self.bot = Bot(
             request=self.request,
             token=settings.TOKEN,
-            base_url=settings.PROXY_URL,
         )
         self.updater = Updater(
             bot=self.bot,
