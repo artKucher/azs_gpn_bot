@@ -11,6 +11,6 @@ RUN apt-get install -y cron
 RUN mkdir /app
 WORKDIR /app
 ADD . /app
-RUN cp app/fill_db.sh /etc/cron.daily/
+RUN cp app/fill_db.sh /etc/cron.daily/fill_db
 
 RUN pip install -r requirements.txt
