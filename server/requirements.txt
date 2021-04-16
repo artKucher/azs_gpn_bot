@@ -1,6 +1,6 @@
 Django==3.0.8
 psycopg2-binary==2.8.5
-django-debug-toolbar==2.2
+django-debug-toolbar==2.2.1
 python-telegram-bot==12.8
 django-money==1.1
 matplotlib==3.3.0
